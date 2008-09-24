@@ -1,0 +1,25 @@
+---
+:server:
+  "yourjabberserver.com"
+:port:
+  5349
+:jid:
+  "mail.yourjabberserver.com"
+:secret:
+  "openup"
+:access_password: 
+  "letmein"
+:smtp_server:
+  "yourmailserver.com"
+:smtp_port:
+  587
+:smtp_user:
+  ""
+:smtp_pass:
+  ""
+:imap_server:
+  "yourmailserver.com"
+:imap_login:
+  "xmpp"
+:imap_pass:
+  ""
