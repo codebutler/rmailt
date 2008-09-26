@@ -80,11 +80,15 @@ class IMAPWatcher
           end
           
           @imap.select('inbox')
-          @is_idle = true
           
-          # Thread will die in the event of an exception
+          if @is_idle == false
+            @imap.idle()
+            @is_idle = true
+          end
+          
+          # Exception block will still be called if there is an exception.
           Thread.stop()
-                    
+           
         rescue Exception => ex
           if ex.is_a?(Net::IMAP::ByeResponseError)
             Jabber::debuglog("IMAP disconnected. Will reconnect in 5 seconds...")
@@ -98,6 +102,7 @@ class IMAPWatcher
         end
         
         @imap = nil
+        @is_idle = false
       end
       
       imap_thread.join()
