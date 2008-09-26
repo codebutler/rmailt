@@ -33,6 +33,7 @@ require 'user'
 require 'net/imap'
 require 'imapextensions'
 require 'imap_watcher'
+require 'stringextensions'
 
 include Daemonize
 
@@ -143,9 +144,11 @@ class RMailT
       if user
         if user.roster_items.include?(message.to.to_s)
           to_email = message.to.to_s
-          to_email = to_email[0..to_email.index('@')-1].gsub('%','@')
+          to_email = to_email[0..to_email.rindex('@')-1].gsub('%','@')
           
-          from_email = "#{message.from.bare.to_s.sub(/@/, '===')}@#{@config[:jid]}"
+          # Replace the last '@' with a '+'
+          from_email = message.from.bare.to_s.replace_last_char('@', '+')
+          from_email << "@#{@config[:jid]}"
           
           smtp_server = @config[:smtp_server]
           smtp_port   = @config[:smtp_port]
@@ -194,11 +197,14 @@ class RMailT
       Jabber::debuglog("Received email from: #{from_email} to: #{to_email}")
       
       begin
-        to_jid     = to_email[0..to_email.index('@')-1].sub(/===/, '@')
-        from_jid   = "#{from_email.gsub(/@/, '%')}@#{@config[:jid]}"
+        to_jid   = to_email[0..to_email.index('@')-1].replace_last_char('+', '@')
+        from_jid = "#{from_email.gsub(/@/, '%')}@#{@config[:jid]}"
+
+        Jabber::debuglog("Received email from JIDs: #{from_jid} to: #{to_jid}")
         
         user = User.first(:jid => to_jid)
         if user
+          Jabber::debuglog("User roster is: #{user.roster_items.inspect}")
           if user.roster_items.include?(from_jid)
             # We have a message to send!
             msg = Jabber::Message.new(from_jid, body)
@@ -206,6 +212,8 @@ class RMailT
             msg.from = from_jid
             msg.to = to_jid
             @component.send(msg)
+          else
+            Jabber::debuglog("#{from_jid} is not in #{to_jid} roster")
           end
         end
       rescue Exception => ex
