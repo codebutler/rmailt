@@ -14,10 +14,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+require 'dm-timestamps'
+
 class User
   include DataMapper::Resource
   
   property :id,           Integer, :serial => true
+  property :created_at,   DateTime
+  property :updated_at,   DateTime
   property :jid,          String
   property :roster_items, Object
 end

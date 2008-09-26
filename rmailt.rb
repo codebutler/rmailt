@@ -50,8 +50,7 @@ class RMailT
     # Load users database
     DataMapper::Logger.new(STDOUT, 0)
     DataMapper.setup(:default, 'sqlite3:rmailt.db')
-    # User.auto_migrate!
-    
+    #User.auto_upgrade!
     
     # Create component
     jid = @config[:jid]
