@@ -48,8 +48,9 @@ class RMailT
     @config = YAML::load_file(config_file)
     
     # Load users database
+    db_path = File.join(@config[:data_dir], 'rmailt.db')
     DataMapper::Logger.new(STDOUT, 0)
-    DataMapper.setup(:default, 'sqlite3:rmailt.db')
+    DataMapper.setup(:default, "sqlite3:#{db_path}")
     #User.auto_upgrade!
     
     # Create component

@@ -1,4 +1,6 @@
 ---
+:data_dir:
+  "/var/lib/rmailt/"
 :server:
   "yourjabberserver.com"
 :port:
