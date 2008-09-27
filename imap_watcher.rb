@@ -58,57 +58,60 @@ class IMAPWatcher
     @message_handlers << handler
   end
   
+  # XXX: This creates WAY too many threads.
   def start() 
-    while true
-      imap_thread = Thread.new do
-        begin
-          Jabber::debuglog("IMAP connecting to #{@server}:#{993}")
-          @imap = Net::IMAP.new(@server, 993, true)
-          @imap.authenticate('LOGIN', @login, @pass)
-          @imap.add_response_handler do |resp|
-            if resp.kind_of?(Net::IMAP::UntaggedResponse) and resp.name == "EXISTS"
-              count = resp.data
-              Jabber::debuglog("Mailbox now has #{count} messages")
-              if count > 0
-                @mutex.synchronize {
-                  @resource.broadcast()
-                }
+    Thread.new do
+      while true
+        imap_thread = Thread.new do
+          begin
+            Jabber::debuglog("IMAP connecting to #{@server}:#{993}")
+            @imap = Net::IMAP.new(@server, 993, true)
+            @imap.authenticate('LOGIN', @login, @pass)
+            @imap.add_response_handler do |resp|
+              if resp.kind_of?(Net::IMAP::UntaggedResponse) and resp.name == "EXISTS"
+                count = resp.data
+                Jabber::debuglog("Mailbox now has #{count} messages")
+                if count > 0
+                  @mutex.synchronize {
+                    @resource.broadcast()
+                  }
+                end
+              elsif resp.is_a?(Net::IMAP::TaggedResponse) and resp.name == "BAD"
+                Jabber::debuglog("IMAP BAD: #{resp.data.text}")
               end
-            elsif resp.is_a?(Net::IMAP::TaggedResponse) and resp.name == "BAD"
-              Jabber::debuglog("IMAP BAD: #{resp.data.text}")
+            end
+            
+            @imap.select('inbox')
+            
+            if @is_idle == false
+              @imap.idle()
+              @is_idle = true
+            end
+            
+            # Exception block will still be called if there is an exception.
+            Thread.stop()
+             
+          rescue Exception => ex
+            if ex.is_a?(Net::IMAP::ByeResponseError)
+              Jabber::debuglog("IMAP disconnected. Will reconnect in 5 seconds...")
+            elsif ex.is_a?(Errno::ECONNREFUSED)
+              Jabber::debuglog("IMAP connection refused! Will reconnect in 5 seconds...")
+            else
+              # Something bad happened, die horribly!
+              Jabber::logger.fatal(ex)
+              Process.exit!
             end
           end
           
-          @imap.select('inbox')
-          
-          if @is_idle == false
-            @imap.idle()
-            @is_idle = true
-          end
-          
-          # Exception block will still be called if there is an exception.
-          Thread.stop()
-           
-        rescue Exception => ex
-          if ex.is_a?(Net::IMAP::ByeResponseError)
-            Jabber::debuglog("IMAP disconnected. Will reconnect in 5 seconds...")
-          elsif ex.is_a?(Errno::ECONNREFUSED)
-            Jabber::debuglog("IMAP connection refused! Will reconnect in 5 seconds...")
-          else
-            # Something bad happened, die horribly!
-            Jabber::logger.fatal(ex)
-            Process.exit!
-          end
+          @imap = nil
+          @is_idle = false
         end
         
-        @imap = nil
-        @is_idle = false
+        imap_thread.join()
+        imap_thread = nil
+        
+        sleep(5)
       end
-      
-      imap_thread.join()
-      imap_thread = nil
-      
-      sleep(5)
     end
   end
 end
