@@ -165,6 +165,11 @@ class RMailT
           user.roster_items.delete(presence.to.to_s)
           user.save
         end
+      elsif presence.type == nil
+        if user
+          Jabber::debuglog("User is now online: #{presence.from.bare.to_s}")
+          send_presence(user)
+        end
       end
     end
     
@@ -189,6 +194,7 @@ class RMailT
           body = message.first_element_text('body')
           msg = "From: #{from_email}\r\nTo: #{to_email}\r\n\r\n#{body}"
           
+          # XXX: This should be replaced by a worker thread/queue
           Thread.new do
             begin
               Net::SMTP.enable_tls(OpenSSL::SSL::VERIFY_NONE)
@@ -289,22 +295,10 @@ class RMailT
     @imap_watcher.start()
 
     Jabber.logger.info("Connected to XMPP server!")
-        
+     
     # Connected! 
     registered_users.each do |user|
-      # Make transport appear online
-      presence = Jabber::Presence.new()
-      presence.from = @config[:jid]
-      presence.to = user.jid
-      @component.send(presence)
-    
-      # Make all email contacts appear online!
-      user.roster_items.each do |item|
-        presence = Jabber::Presence.new()
-        presence.from = item
-        presence.to = user.jid
-        @component.send(presence)
-      end
+      send_presence(user)
     end
     
   Jabber.logger.info('Started')
@@ -315,5 +309,21 @@ class RMailT
   
   def registered_users
     User.all
+  end
+  
+  def send_presence(user)
+    # Make transport appear online
+    presence = Jabber::Presence.new()
+    presence.from = @config[:jid]
+    presence.to = user.jid
+    @component.send(presence)
+
+    # Make all email contacts appear online!
+    user.roster_items.each do |item|
+      presence = Jabber::Presence.new()
+      presence.from = item
+      presence.to = user.jid
+      @component.send(presence)
+    end
   end
 end
