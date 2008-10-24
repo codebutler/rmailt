@@ -14,9 +14,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+
+PID_FILE = '/var/run/rmailt/rmailt.pid'
+
+begin
 require 'rubygems'
+rescue LoadError
+end
+
 require 'optparse'
-require 'daemonize'
 require 'syslog'
 require 'syslog_logger'
 require 'tmail'
@@ -27,13 +33,15 @@ require 'yaml'
 require 'xmpp4r'
 require 'xmpp4r/discovery'
 require 'xmpp4r/rexmladdons'
-require 'register'
-require 'gateway'
-require 'user'
 require 'net/imap'
-require 'imapextensions'
-require 'imap_watcher'
-require 'stringextensions'
+
+require 'rmailt/imapextensions'
+require 'rmailt/imap_watcher'
+require 'rmailt/stringextensions'
+require 'rmailt/register'
+require 'rmailt/gateway'
+require 'rmailt/user'
+require 'rmailt/daemonize'
 
 include Daemonize
 
@@ -43,15 +51,37 @@ include Jabber::Dataforms
 class RMailT
   attr_reader :config
   
-  def initialize(config_file)  
+  def initialize()
+  # Parse command line options
+  @options = { :config => '/etc/rmailt.yml' }
+  OptionParser.new do |opts|
+    opts.banner = "Usage: rmailt [options]"
+    opts.on("--debug", "Enable debug output") do |d|
+    @options[:debug] = d
+    end    
+    opts.on("-d", "--daemon", "Run as a background dameon") do |d|
+    @options[:daemon] = d
+    end    
+    opts.on("--config CONFIGFILE", "Specify configuration file (defaults to /etc/rmailt.yml)") do |c|
+    @options[:config] = c
+    end
+  end.parse!
+
+  # Set up debug logging if enabled
+  if @options[:debug] == true
+    Jabber::debug = true
+  end
+  
+  Jabber.logger.info('Initializing...')
+  
     # Read configuration file
-    @config = YAML::load_file(config_file)
+    @config = YAML::load_file(@options[:config])
     
     # Load users database
     db_path = File.join(@config[:data_dir], 'rmailt.db')
     DataMapper::Logger.new(STDOUT, 0)
     DataMapper.setup(:default, "sqlite3:#{db_path}")
-    #User.auto_upgrade!
+    User.auto_upgrade! # XXX This might not be safe!
     
     # Create component
     jid = @config[:jid]
@@ -167,7 +197,7 @@ class RMailT
               end
               Jabber::debuglog("Email sent. From: #{from_email} To: #{to_email}")
             rescue Exception => ex
-              Jabber::debuglog("ERROR WHILE SENDING MAIL! #{ex} #{ex.backtrace.join("\n")}")
+              Jabber.logger.error("ERROR WHILE SENDING MAIL! #{ex} #{ex.backtrace.join("\n")}")
               msg = Jabber::Message.new(message.from, "Sorry, an error has occured and the following message was not sent:\n\n#{msg}")
               msg.from = @config[:jid]
               msg.to = message.from
@@ -217,7 +247,7 @@ class RMailT
           end
         end
       rescue Exception => ex
-        Jabber::debuglog("FAILED TO PARSE EMAIL!! #{to_email} #{ex}")
+        Jabber.logger.error("FAILED TO PARSE EMAIL!! #{to_email} #{ex}")
       end
       
       # Delete the mail
@@ -226,16 +256,40 @@ class RMailT
   end
   
   def start()
+    # Become a daemon if requested
+    if @options[:daemon] == true
+      pid = daemonize()
+      # Use syslog for logging
+      Jabber.logger = SyslogLogger.new('rmailt')
+      # Write out PID file.
+      begin
+        if File.file?(PID_FILE)
+          Jabber.logger.fatal("#{PID_FILE} exists! Exiting!")
+          exit 1
+          return
+        end
+        File.open(PID_FILE, 'w') do |file|
+          file.puts Process.pid
+        end
+      rescue Exception
+        Jabber.logger.fatal("Failed to write #{PID_FILE}! Exiting.")
+        exit 1
+        return
+      end
+    end
+  
     server = @config[:server]
     port   = @config[:port]
     secret = @config[:secret]
     
-    Jabber::debuglog("Connecting to server (#{server}:#{port})")
+    Jabber.logger.info("Connecting to XMPP server (#{server}:#{port})")
     @component.connect(server, port)
     @component.auth(secret)
 
     @imap_watcher.start()
-    
+
+    Jabber.logger.info("Connected to XMPP server!")
+        
     # Connected! 
     registered_users.each do |user|
       # Make transport appear online
@@ -252,6 +306,9 @@ class RMailT
         @component.send(presence)
       end
     end
+    
+  Jabber.logger.info('Started')
+  Thread.stop()
   end
   
   private
@@ -259,58 +316,4 @@ class RMailT
   def registered_users
     User.all
   end
-end
-
-# Parse command line options
-options = {
-  :config => '/etc/rmailt.yml'
-}
-OptionParser.new do |opts|
-  opts.banner = "Usage: rmailt [options]"
-  
-  opts.on("--debug", "Enable debug output") do |d|
-    options[:debug] = d
-  end
-  
-  opts.on("-d", "--daemon", "Run as a background dameon") do |d|
-    options[:daemon] = d
-  end  
-  
-  opts.on("--config CONFIGFILE", "Specify configuration file (defaults to /etc/rmailt.yml)") do |c|
-    options[:config] = c
-  end
-end.parse!
-
-# Set up debug logging if enabled
-if options[:debug] == true
-  Jabber::debug = true
-end
-
-if options[:daemon] == true
-  pid = daemonize()
-  
-  # Use syslog for logging
-  Jabber.logger = SyslogLogger.new('rmailt')
-  
-  # Write out PID file.
-  PID_FILE = '/var/run/rmailt/rmailt.pid'
-  begin
-    File.open(PID_FILE, 'w') do |file|
-      file.write Process.pid
-    end
-  rescue Exception
-    Jabber.logger.fatal("Failed to write #{PID_FILE}! Exiting.")
-    exit
-  end
-end
-    
-Jabber.logger.info('Started')
-
-begin
-  # Start the app!
-  app = RMailT.new(options[:config])
-  app.start()
-  Thread.stop()
-rescue Exception => ex
-  Jabber.logger.fatal(ex)
 end

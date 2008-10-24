@@ -1,0 +1,12 @@
+daemonize.rb            /usr/lib/ruby/1.8/rmailt
+imapextensions.rb       /usr/lib/ruby/1.8/rmailt
+register.rb             /usr/lib/ruby/1.8/rmailt
+stringextensions.rb     /usr/lib/ruby/1.8/rmailt
+gateway.rb              /usr/lib/ruby/1.8/rmailt
+imap_watcher.rb         /usr/lib/ruby/1.8/rmailt
+user.rb                 /usr/lib/ruby/1.8/rmailt
+rmailt.rb               /usr/lib/ruby/1.8
+rmailt                  /usr/sbin
+rmailt.yml.example		/usr/share/doc/rmailt
+COPYING					/usr/share/doc/rmailt
+README.md				/usr/share/doc/rmailt

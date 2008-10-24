@@ -1,0 +1,10 @@
+Source: rmailt
+Section: base
+Priority: optional
+Maintainer: Eric Butler <eric@extremeboredom.net>
+
+Package: rmailt
+Version: 0.1
+Architecture: all
+Depends: rubygems1.8 | rubygems
+Description: An XMPP (aka Jabber) email transport written in ruby.

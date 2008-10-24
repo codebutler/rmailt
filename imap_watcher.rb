@@ -49,7 +49,7 @@ class IMAPWatcher
           @is_idle = true
         end
       rescue Exception => ex
-        Jabber::debuglog("ERROR IN IMAP WORKER THREAD: #{ex}")
+        Jabber.logger.fatal("ERROR IN IMAP WORKER THREAD: #{ex}")
       end
     end
   end
@@ -62,7 +62,7 @@ class IMAPWatcher
     while true
       imap_thread = Thread.new do
         begin
-          Jabber::debuglog("IMAP connecting to #{@server}:#{993}")
+          Jabber.logger.info("IMAP connecting to #{@server}:#{993}")
           @imap = Net::IMAP.new(@server, 993, true)
           @imap.authenticate('LOGIN', @login, @pass)
           @imap.add_response_handler do |resp|
@@ -75,25 +75,29 @@ class IMAPWatcher
                 }
               end
             elsif resp.is_a?(Net::IMAP::TaggedResponse) and resp.name == "BAD"
-              Jabber::debuglog("IMAP BAD: #{resp.data.text}")
+              Jabber.logger.error("IMAP BAD: #{resp.data.text}")
             end
           end
           
+          Jabber.logger.info("IMAP connected!")
+          
           @imap.select('inbox')
           
-          if @is_idle == false
-            @imap.idle()
-            @is_idle = true
-          end
+          @mutex.synchronize {
+            if @is_idle == false
+              @imap.idle()
+              @is_idle = true
+            end
+          }
           
           # Exception block will still be called if there is an exception.
           Thread.stop()
            
         rescue Exception => ex
           if ex.is_a?(Net::IMAP::ByeResponseError)
-            Jabber::debuglog("IMAP disconnected. Will reconnect in 5 seconds...")
+            Jabber.logger.error("IMAP disconnected. Will reconnect in 5 seconds...")
           elsif ex.is_a?(Errno::ECONNREFUSED)
-            Jabber::debuglog("IMAP connection refused! Will reconnect in 5 seconds...")
+            Jabber.logger.error("IMAP connection refused! Will reconnect in 5 seconds...")
           else
             # Something bad happened, die horribly!
             Jabber::logger.fatal(ex)

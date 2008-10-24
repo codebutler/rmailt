@@ -1,0 +1,6 @@
+#!/usr/bin/ruby
+
+require 'rmailt'
+
+app = RMailT.new
+app.start()
