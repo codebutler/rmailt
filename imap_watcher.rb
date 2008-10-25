@@ -22,36 +22,8 @@ class IMAPWatcher
     @is_idle = false
     @message_handlers = []
     
-    # Set up the IMAP worker
-    @resource = ConditionVariable.new
-    @mutex = Mutex.new
-    Thread.new do
-      begin
-        while true
-          @mutex.synchronize {
-            @resource.wait(@mutex)
-          }
-          if @is_idle == true
-            @imap.done()
-            @is_idle = false
-          end
-          @imap.search('ALL').each do |message_id|
-            raw = @imap.fetch(message_id, 'BODY[]')[0].attr['BODY[]']
-            @message_handlers.each do |handler|
-              if handler.call(raw) == true
-                # Delete the message!
-                @imap.store(message_id, "+FLAGS", [:Deleted])
-              end
-            end
-          end
-          @imap.expunge()
-          @imap.idle()
-          @is_idle = true
-        end
-      rescue Exception => ex
-        Jabber.logger.fatal("ERROR IN IMAP WORKER THREAD: #{ex}")
-      end
-    end
+   # Set up the IMAP worker
+   @mutex = Mutex.new
   end
   
   def add_message_handler(&handler)
@@ -64,22 +36,11 @@ class IMAPWatcher
       while true
         imap_thread = Thread.new do
           begin
-            Jabber::debuglog("IMAP connecting to #{@server}:#{993}")
+            Jabber.logger.info("IMAP connecting to #{@server}:#{993}")
             @imap = Net::IMAP.new(@server, 993, true)
             @imap.authenticate('LOGIN', @login, @pass)
-            @imap.add_response_handler do |resp|
-              if resp.kind_of?(Net::IMAP::UntaggedResponse) and resp.name == "EXISTS"
-                count = resp.data
-                Jabber::debuglog("Mailbox now has #{count} messages")
-                if count > 0
-                  @mutex.synchronize {
-                    @resource.broadcast()
-                  }
-                end
-              elsif resp.is_a?(Net::IMAP::TaggedResponse) and resp.name == "BAD"
-                Jabber::debuglog("IMAP BAD: #{resp.data.text}")
-              end
-            end
+
+            @imap.add_response_handler { |r| imap_handler(r) }
 
             Jabber.logger.info("IMAP connected!");
             
@@ -97,9 +58,9 @@ class IMAPWatcher
              
           rescue Exception => ex
             if ex.is_a?(Net::IMAP::ByeResponseError)
-              Jabber::debuglog("IMAP disconnected. Will reconnect in 5 seconds...")
+              Jabber.logger.info("IMAP disconnected. Will reconnect in 5 seconds...")
             elsif ex.is_a?(Errno::ECONNREFUSED)
-              Jabber::debuglog("IMAP connection refused! Will reconnect in 5 seconds...")
+              Jabber.logger.info("IMAP connection refused! Will reconnect in 5 seconds...")
             else
               # Something bad happened, die horribly!
               Jabber::logger.fatal(ex)
@@ -115,6 +76,43 @@ class IMAPWatcher
         imap_thread = nil
         
         sleep(5)
+      end
+    end
+  end
+
+  private
+
+  def imap_handler(resp)
+    # If this isn't done in a new thread it doesn't work!!
+    Thread.new do
+      @mutex.synchronize do
+        if resp.kind_of?(Net::IMAP::UntaggedResponse) and resp.name == "EXISTS"
+          count = resp.data
+          Jabber.logger.info("Mailbox now has #{count} messages")
+          if count > 0
+            if @is_idle
+              @imap.done()
+              @is_idle = false
+            end
+
+            @imap.search('ALL').each do |message_id|
+              raw = @imap.fetch(message_id, 'BODY[]')[0].attr['BODY[]']
+              @message_handlers.each do |handler|
+                if handler.call(raw) == true
+                  # Delete the message!
+                  @imap.store(message_id, "+FLAGS", [:Deleted])
+                end
+              end
+            end
+
+            @imap.expunge()
+
+            @imap.idle()
+            @is_idle = true
+          end
+        elsif resp.is_a?(Net::IMAP::TaggedResponse) and resp.name == "BAD"
+          Jabber.logger.error("IMAP BAD: #{resp.data.text}")
+        end
       end
     end
   end

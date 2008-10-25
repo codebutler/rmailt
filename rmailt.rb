@@ -70,6 +70,7 @@ class RMailT
   # Set up debug logging if enabled
   if @options[:debug] == true
     Jabber::debug = true
+    Net::IMAP.debug = true
   end
   
   Jabber.logger.info('Initializing...')
@@ -106,7 +107,7 @@ class RMailT
     @register_responder.add_registered_callback() do |jid|
       user = User.first(:jid => jid.bare.to_s)
       if user.nil?
-        Jabber::debuglog("New user registered! #{jid.bare}")
+        Jabber.logger.debug("New user registered! #{jid.bare}")
         user = User.new(:jid => jid.bare.to_s)
         user.roster_items = []
         user.save
@@ -167,7 +168,7 @@ class RMailT
         end
       elsif presence.type == nil
         if user
-          Jabber::debuglog("User is now online: #{presence.from.bare.to_s}")
+          Jabber.logger.debug("User is now online: #{presence.from.bare.to_s}")
           send_presence(user)
         end
       end
@@ -201,7 +202,7 @@ class RMailT
               Net::SMTP.start(smtp_server, smtp_port)  do |smtp|
                 smtp.send_message(msg, from_email, [ to_email ])
               end
-              Jabber::debuglog("Email sent. From: #{from_email} To: #{to_email}")
+              Jabber.logger.debug("Email sent. From: #{from_email} To: #{to_email}")
             rescue Exception => ex
               Jabber.logger.error("ERROR WHILE SENDING MAIL! #{ex} #{ex.backtrace.join("\n")}")
               msg = Jabber::Message.new(message.from, "Sorry, an error has occured and the following message was not sent:\n\n#{msg}")
@@ -211,7 +212,7 @@ class RMailT
             end
           end
         else
-          Jabber::debuglog("NOT IN ROSTER !!!")
+          Jabber.logger.debug("NOT IN ROSTER !!!")
         end
       else
         msg = Jabber::Message.new(message.from, 'Sorry, you must be registered to use this service.')
@@ -230,17 +231,17 @@ class RMailT
       to_email   = mail.to.first
       body       = mail.body
       
-      Jabber::debuglog("Received email from: #{from_email} to: #{to_email}")
+      Jabber.logger.debug("Received email from: #{from_email} to: #{to_email}")
       
       begin
         to_jid   = to_email[0..to_email.index('@')-1].replace_last_char('+', '@')
         from_jid = "#{from_email.gsub(/@/, '%')}@#{@config[:jid]}"
 
-        Jabber::debuglog("Received email from JIDs: #{from_jid} to: #{to_jid}")
+        Jabber.logger.debug("Received email from JIDs: #{from_jid} to: #{to_jid}")
         
         user = User.first(:jid => to_jid)
         if user
-          Jabber::debuglog("User roster is: #{user.roster_items.inspect}")
+          Jabber.logger.debug("User roster is: #{user.roster_items.inspect}")
           if user.roster_items.include?(from_jid)
             # We have a message to send!
             msg = Jabber::Message.new(from_jid, body)
@@ -249,7 +250,7 @@ class RMailT
             msg.to = to_jid
             @component.send(msg)
           else
-            Jabber::debuglog("#{from_jid} is not in #{to_jid} roster")
+            Jabber.logger.debug("#{from_jid} is not in #{to_jid} roster")
           end
         end
       rescue Exception => ex
