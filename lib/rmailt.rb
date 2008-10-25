@@ -52,35 +52,36 @@ class RMailT
   attr_reader :config
   
   def initialize()
-  # Parse command line options
-  @options = { :config => '/etc/rmailt.yml' }
-  OptionParser.new do |opts|
-    opts.banner = "Usage: rmailt [options]"
-    opts.on("--debug", "Enable debug output") do |d|
-    @options[:debug] = d
-    end    
-    opts.on("-d", "--daemon", "Run as a background dameon") do |d|
-    @options[:daemon] = d
-    end    
-    opts.on("--config CONFIGFILE", "Specify configuration file (defaults to /etc/rmailt.yml)") do |c|
-    @options[:config] = c
-    end
-  end.parse!
+    # Parse command line options
+    @options = { :config => '/etc/rmailt.yml' }
+    OptionParser.new do |opts|
+      opts.banner = "Usage: rmailt [options]"
+      opts.on("--debug", "Enable debug output") do |d|
+        @options[:debug] = d
+      end    
+      opts.on("-d", "--daemon", "Run as a background dameon") do |d|
+        @options[:daemon] = d
+      end    
+      opts.on("--config CONFIGFILE", "Specify configuration file (defaults to /etc/rmailt.yml)") do |c|
+        @options[:config] = c
+      end
+    end.parse!
 
-  # Set up debug logging if enabled
-  if @options[:debug] == true
-    Jabber::debug = true
-    Net::IMAP.debug = true
-  end
-  
-  Jabber.logger.info('Initializing...')
+    # Set up debug logging if enabled
+    if @options[:debug] == true
+      Jabber::debug = true
+      Net::IMAP.debug = true
+      DataMapper::Logger.new(STDOUT, :debug)
+      Jabber.logger.info('Debug Enabled')
+    end
+    
+    Jabber.logger.info('Initializing...')
   
     # Read configuration file
     @config = YAML::load_file(@options[:config])
     
     # Load users database
     db_path = File.join(@config[:data_dir], 'rmailt.db')
-    DataMapper::Logger.new(STDOUT, 0)
     DataMapper.setup(:default, "sqlite3:#{db_path}")
     User.auto_upgrade! # XXX This might not be safe!
     
