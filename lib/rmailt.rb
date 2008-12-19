@@ -242,7 +242,6 @@ class RMailT
         
         user = User.first(:jid => to_jid)
         if user
-          Jabber.logger.debug("User roster is: #{user.roster_items.inspect}")
           if user.roster_items.include?(from_jid)
             # We have a message to send!
             msg = Jabber::Message.new(from_jid, body)

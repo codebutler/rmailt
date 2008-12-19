@@ -53,8 +53,12 @@ class IMAPWatcher
               end
             }
             
+            # Wait 5 minutes then reconnect.
             # Exception block will still be called if there is an exception.
-            Thread.stop()
+            sleep 180
+
+            @imap.disconnect
+            Jabber.logger.info("IMAP disconnected. Will reconnect in 5 seconds...")
              
           rescue Exception => ex
             if ex.is_a?(Net::IMAP::ByeResponseError)
